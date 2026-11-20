@@ -1,0 +1,2438 @@
+MiPlayer v4 - proyecto completo (un solo archivo)
+============================================================
+Cada archivo empieza con una linea '##### RUTA #####'.
+Copia cada bloque a su ruta dentro del repositorio y haz commit en main;
+GitHub Actions compila el APK (Actions > Build APK > Artifacts).
+
+Archivos incluidos:
+  - .github/workflows/build.yml
+  - .gitignore
+  - README.md
+  - app/src/main/AndroidManifest.xml
+  - app/src/main/java/com/miplayer/app/AudioEffects.kt
+  - app/src/main/java/com/miplayer/app/AudioExtractor.kt
+  - app/src/main/java/com/miplayer/app/Dialogs.kt
+  - app/src/main/java/com/miplayer/app/Library.kt
+  - app/src/main/java/com/miplayer/app/Lyrics.kt
+  - app/src/main/java/com/miplayer/app/MainActivity.kt
+  - app/src/main/java/com/miplayer/app/NowPlaying.kt
+  - app/src/main/java/com/miplayer/app/PlaybackService.kt
+  - app/src/main/java/com/miplayer/app/PlayerViewModel.kt
+  - app/src/main/java/com/miplayer/app/PlayerWidget.kt
+  - app/src/main/java/com/miplayer/app/Queue.kt
+  - app/src/main/java/com/miplayer/app/Settings.kt
+  - app/src/main/java/com/miplayer/app/Videos.kt
+  - app/src/main/res/drawable/ic_launcher_background.xml
+  - app/src/main/res/drawable/ic_launcher_foreground.xml
+  - app/src/main/res/drawable/widget_bg.xml
+  - app/src/main/res/layout/widget_player.xml
+  - app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+  - app/src/main/res/values/strings.xml
+  - app/src/main/res/values/themes.xml
+  - app/src/main/res/xml/automotive_app_desc.xml
+  - app/src/main/res/xml/widget_info.xml
+  - gradle.properties
+
+##### .github/workflows/build.yml #####
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Compilar APK debug
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MiPlayer-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+##### .gitignore #####
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+
+##### README.md #####
+# MiPlayer
+
+Reproductor de música local para Android, inspirado en Lark Player.
+
+- Kotlin + Jetpack Compose + Media3 (ExoPlayer + MediaSession)
+- Biblioteca: Canciones, Álbumes, Artistas, Carpetas, Favoritas y Listas
+- Listas propias, "Añadidas recientemente" y "Más escuchadas"
+- Cola de reproducción, "reproducir a continuación", búsqueda
+- Ordenar (título, artista, álbum, fecha, duración) y ocultar carpetas
+- Editar título, artista, álbum y carátula (solo dentro de la app)
+- Letras: archivos .lrc sincronizados y descarga automática en línea (LRCLIB, se puede desactivar)
+- Videos: pestaña Videos, reproductor de video; al cerrar la pantalla sigue sonando solo el audio
+- Convertir video a audio sin recodificar (AAC → .m4a, Opus/Vorbis → .webm) en Música/MiPlayer
+- "Abrir con MiPlayer" desde otras apps (audio y video)
+- Cola con reordenar arrastrando, selección múltiple (mantén pulsada una canción), índice A–Z
+- Álbumes ordenados por número de pista
+- Temporizador de apagado, incluido "al terminar la canción"
+- Nivelador de volumen (limitador, no es normalización real)
+- Duración mínima configurable e inclusión de tonos y notas de voz
+- Crossfade real experimental (desactivado por defecto)
+- Android Auto: expone Canciones, Álbumes, Artistas, Favoritas y Listas
+- Ecualizador propio con presets y refuerzo de graves
+- Velocidad de reproducción, temporizador de apagado
+- Fundido entre canciones (la reproducción sin pausas la da ExoPlayer)
+- Recuerda la cola, la posición, la velocidad, el aleatorio y la repetición
+- Widget de inicio y controles en la pantalla de bloqueo (notificación multimedia)
+- Temas: sistema, claro, oscuro, color de acento y Material You (Android 12+)
+- Respaldo: exportar e importar listas, favoritas y ajustes en un archivo JSON
+
+## Compilar
+
+Sube el proyecto a un repositorio de GitHub (rama `main`). El workflow
+`.github/workflows/build.yml` compila el APK; descárgalo desde
+Actions > Build APK > Artifacts.
+
+## Notas
+
+- Escribir etiquetas dentro del archivo de audio no está incluido: las ediciones se guardan solo dentro de la app.
+- Android Auto: si instalas el APK fuera de Google Play, activa el modo desarrollador de Android Auto y
+  "Orígenes desconocidos".
+- Esta versión no se ha podido compilar en el entorno donde se escribió; si el build de GitHub falla,
+  copia el error del log y se corrige.
+
+##### app/src/main/AndroidManifest.xml #####
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MiPlayer">
+
+        <!-- Android Auto: la app expone su biblioteca de música -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- "Abrir con MiPlayer" desde otras apps -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".PlayerWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
+
+##### app/src/main/java/com/miplayer/app/AudioEffects.kt #####
+package com.miplayer.app
+
+import android.content.SharedPreferences
+import android.media.audiofx.BassBoost
+import android.media.audiofx.DynamicsProcessing
+import android.media.audiofx.Equalizer
+import android.os.Build
+import android.os.Bundle
+
+/** Ecualizador + refuerzo de graves, ligados a la sesión de audio del reproductor. */
+class AudioEffects(private val prefs: SharedPreferences) {
+
+    private var eq: Equalizer? = null
+    private var bass: BassBoost? = null
+    private var leveler: Any? = null // DynamicsProcessing (Android 9+)
+
+    fun attach(session: Int) {
+        release()
+        if (session == 0) return
+        try {
+            val e = Equalizer(0, session)
+            e.setEnabled(prefs.getBoolean("eq_on", false))
+            val saved = prefs.getString("eq_levels", null)?.split(",")?.mapNotNull { it.toShortOrNull() }
+            if (saved != null && saved.size == e.numberOfBands.toInt()) {
+                saved.forEachIndexed { i, l -> e.setBandLevel(i.toShort(), l) }
+            }
+            eq = e
+        } catch (e: Exception) {
+            eq = null
+        }
+        try {
+            val b = BassBoost(0, session)
+            val s = prefs.getInt("bass", 0)
+            if (b.strengthSupported) {
+                b.setStrength(s.toShort())
+                b.setEnabled(s > 0)
+            }
+            bass = b
+        } catch (e: Exception) {
+            bass = null
+        }
+        attachLeveler(session)
+    }
+
+    /**
+     * Nivelador: sube un poco el volumen y limita los picos con un limitador.
+     * No es una normalización real de volumen (no mide cada canción), solo parejea un poco.
+     */
+    private fun attachLeveler(session: Int) {
+        if (Build.VERSION.SDK_INT < 28) return
+        try {
+            val config = DynamicsProcessing.Config.Builder(
+                DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+                2, false, 0, false, 0, false, 0, true
+            ).build()
+            val dp = DynamicsProcessing(0, session, config)
+            dp.setInputGainAllChannelsTo(4f)
+            dp.setLimiterAllChannelsTo(
+                DynamicsProcessing.Limiter(true, true, 0, 5f, 80f, 10f, -3f, 0f)
+            )
+            dp.setEnabled(prefs.getBoolean("leveler", false))
+            leveler = dp
+        } catch (e: Exception) {
+            leveler = null
+        }
+    }
+
+    fun setLeveler(on: Boolean) {
+        prefs.edit().putBoolean("leveler", on).apply()
+        if (Build.VERSION.SDK_INT >= 28) {
+            runCatching { (leveler as? DynamicsProcessing)?.setEnabled(on) }
+        }
+    }
+
+    fun levelerAvailable(): Boolean = leveler != null
+
+    fun release() {
+        runCatching { eq?.release() }
+        runCatching { bass?.release() }
+        if (Build.VERSION.SDK_INT >= 28) runCatching { (leveler as? DynamicsProcessing)?.release() }
+        eq = null
+        bass = null
+        leveler = null
+    }
+
+    fun info(): Bundle {
+        val b = Bundle()
+        val e = eq
+        if (e == null) {
+            b.putBoolean("ok", false)
+            return b
+        }
+        val n = e.numberOfBands.toInt()
+        val range = e.bandLevelRange
+        b.putBoolean("ok", true)
+        b.putInt("bands", n)
+        b.putInt("min", range[0].toInt())
+        b.putInt("max", range[1].toInt())
+        b.putIntArray("freqs", IntArray(n) { e.getCenterFreq(it.toShort()) / 1000 })
+        b.putIntArray("levels", IntArray(n) { e.getBandLevel(it.toShort()).toInt() })
+        b.putBoolean("enabled", e.getEnabled())
+        b.putInt("bass", prefs.getInt("bass", 0))
+        return b
+    }
+
+    fun setBand(index: Int, level: Int) {
+        val e = eq ?: return
+        e.setBandLevel(index.toShort(), level.toShort())
+        saveLevels(e)
+    }
+
+    fun setEnabled(on: Boolean) {
+        eq?.setEnabled(on)
+        prefs.edit().putBoolean("eq_on", on).apply()
+    }
+
+    fun setBass(strength: Int) {
+        bass?.let {
+            if (it.strengthSupported) {
+                it.setStrength(strength.toShort())
+                it.setEnabled(strength > 0)
+            }
+        }
+        prefs.edit().putInt("bass", strength).apply()
+    }
+
+    fun preset(name: String) {
+        val e = eq ?: return
+        val g = PRESETS[name] ?: return
+        val n = e.numberOfBands.toInt()
+        val min = e.bandLevelRange[0].toInt()
+        val max = e.bandLevelRange[1].toInt()
+        for (i in 0 until n) {
+            val pos = if (n == 1) 0f else i * (g.size - 1).toFloat() / (n - 1)
+            val lo = pos.toInt().coerceIn(0, g.size - 2)
+            val frac = pos - lo
+            val v = g[lo] * (1 - frac) + g[lo + 1] * frac
+            val level = (v * 100).toInt().coerceIn(min, max)
+            e.setBandLevel(i.toShort(), level.toShort())
+        }
+        saveLevels(e)
+        setEnabled(true)
+    }
+
+    private fun saveLevels(e: Equalizer) {
+        val n = e.numberOfBands.toInt()
+        val s = (0 until n).joinToString(",") { e.getBandLevel(it.toShort()).toString() }
+        prefs.edit().putString("eq_levels", s).apply()
+    }
+
+    companion object {
+        val PRESETS: Map<String, List<Int>> = linkedMapOf(
+            "Normal" to listOf(0, 0, 0, 0, 0),
+            "Rock" to listOf(5, 3, -1, 3, 5),
+            "Bajos" to listOf(7, 5, 1, 0, 0),
+            "Pop" to listOf(-1, 2, 4, 2, -1),
+            "Vocal" to listOf(-2, 0, 4, 3, 1),
+            "Agudos" to listOf(0, 0, 0, 3, 6),
+            "Clásica" to listOf(4, 3, -1, 3, 4)
+        )
+    }
+}
+
+##### app/src/main/java/com/miplayer/app/AudioExtractor.kt #####
+package com.miplayer.app
+
+import android.content.ContentValues
+import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
+import android.media.MediaScannerConnection
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import java.io.File
+import java.nio.ByteBuffer
+
+/**
+ * Extrae la pista de audio de un video SIN recodificar (sin pérdida de calidad).
+ * Soporta audio AAC (se guarda como .m4a) y Opus/Vorbis (se guardan como .webm).
+ * Otros códecs (MP3, AC3, etc.) no se pueden copiar así y se avisa al usuario.
+ */
+object AudioExtractor {
+
+    class Result(val ok: Boolean, val message: String)
+
+    private fun safeName(s: String): String =
+        s.replace(Regex("""[\\/:*?"<>|]"""), "_").trim().ifBlank { "audio" }.take(100)
+
+    fun extract(ctx: Context, src: Uri, title: String, onProgress: (Float) -> Unit): Result {
+        val ex = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        var muxerStarted = false
+        val tmp = File(ctx.cacheDir, "extract_${System.currentTimeMillis()}.tmp")
+        try {
+            ex.setDataSource(ctx, src, null)
+            var track = -1
+            for (i in 0 until ex.trackCount) {
+                val m = ex.getTrackFormat(i).getString(MediaFormat.KEY_MIME) ?: continue
+                if (m.startsWith("audio/")) {
+                    track = i
+                    break
+                }
+            }
+            if (track < 0) return Result(false, "Este video no tiene pista de audio.")
+
+            val format = ex.getTrackFormat(track)
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+            val (container, ext, outMime) = when (mime) {
+                "audio/mp4a-latm" -> Triple(MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4, "m4a", "audio/mp4")
+                "audio/opus", "audio/vorbis" -> Triple(MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM, "webm", "audio/webm")
+                else -> return Result(
+                    false,
+                    "El audio de este video usa el formato \"$mime\", que no se puede extraer sin recodificar. " +
+                        "Funciona con AAC (lo más común), Opus y Vorbis."
+                )
+            }
+
+            ex.selectTrack(track)
+            muxer = MediaMuxer(tmp.absolutePath, container)
+            val outIndex = muxer.addTrack(format)
+            muxer.start()
+            muxerStarted = true
+
+            val total = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+            val buffer = ByteBuffer.allocate(1 shl 20)
+            val info = MediaCodec.BufferInfo()
+            var lastReport = 0L
+            while (true) {
+                buffer.clear()
+                val size = ex.readSampleData(buffer, 0)
+                if (size < 0) break
+                val t = ex.sampleTime
+                val flags = if (ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0)
+                    MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                info.set(0, size, t, flags)
+                muxer.writeSampleData(outIndex, buffer, info)
+                ex.advance()
+                if (total > 0 && t - lastReport > 1_000_000L) {
+                    lastReport = t
+                    onProgress((t.toFloat() / total).coerceIn(0f, 1f))
+                }
+            }
+            muxer.stop()
+            muxerStarted = false
+            muxer.release()
+            muxer = null
+
+            val name = "${safeName(title)}.$ext"
+            val where = save(ctx, tmp, name, outMime)
+            onProgress(1f)
+            return Result(true, "Audio guardado: $where")
+        } catch (e: Exception) {
+            return Result(false, "No se pudo extraer el audio (${e.javaClass.simpleName}).")
+        } finally {
+            runCatching { if (muxerStarted) muxer?.stop() }
+            runCatching { muxer?.release() }
+            runCatching { ex.release() }
+            runCatching { tmp.delete() }
+        }
+    }
+
+    /** Guarda el archivo en la carpeta Música. Devuelve una descripción de dónde quedó. */
+    private fun save(ctx: Context, file: File, name: String, mime: String): String {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, name)
+                put(MediaStore.Audio.Media.MIME_TYPE, mime)
+                put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/MiPlayer")
+                put(MediaStore.Audio.Media.IS_MUSIC, 1)
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
+            }
+            val resolver = ctx.contentResolver
+            val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("insert")
+            resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
+                ?: throw IllegalStateException("open")
+            val done = ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }
+            resolver.update(uri, done, null, null)
+            return "Música/MiPlayer/$name"
+        }
+        // Android 8 y 9: carpeta propia de la app (no requiere permiso de escritura)
+        val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: ctx.filesDir
+        dir.mkdirs()
+        val dest = File(dir, name)
+        file.copyTo(dest, overwrite = true)
+        MediaScannerConnection.scanFile(ctx, arrayOf(dest.absolutePath), arrayOf(mime), null)
+        return dest.absolutePath
+    }
+}
+
+##### app/src/main/java/com/miplayer/app/Dialogs.kt #####
+package com.miplayer.app
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+
+val SortOptions = listOf("Título", "Artista", "Álbum", "Fecha añadida", "Duración")
+
+@Composable
+fun SortDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ordenar canciones") },
+        text = {
+            Column {
+                SortOptions.forEachIndexed { i, label ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { vm.setSort(i, vm.sortAsc) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            label,
+                            Modifier.weight(1f),
+                            color = if (vm.sortKey == i) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                        if (vm.sortKey == i) Text("✓", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Chip("Ascendente", vm.sortAsc) { vm.setSort(vm.sortKey, true) }
+                    Chip("Descendente", !vm.sortAsc) { vm.setSort(vm.sortKey, false) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Listo") } }
+    )
+}
+
+@Composable
+fun SpeedDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Velocidad de reproducción") },
+        text = {
+            Column {
+                listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { v ->
+                    val selected = kotlin.math.abs(vm.speed - v) < 0.01f
+                    Text(
+                        if (v == 1f) "Normal (1x)" else "${v}x",
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                vm.setSpeed(v)
+                                onDismiss()
+                            }
+                            .padding(vertical = 12.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+    )
+}
+
+/** Los cambios solo se guardan dentro de la app; no modifican el archivo de audio. */
+@Composable
+fun EditSongDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit) {
+    var title by remember { mutableStateOf(song.title) }
+    var artist by remember { mutableStateOf(song.artist) }
+    var album by remember { mutableStateOf(song.album) }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) vm.setCustomArt(song.id, uri)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar información") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Art(song, Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)), px = 200)
+                    TextButton(onClick = { picker.launch("image/*") }) { Text("Cambiar carátula") }
+                }
+                TextField(title, { title = it }, label = { Text("Título") }, singleLine = true)
+                TextField(artist, { artist = it }, label = { Text("Artista") }, singleLine = true)
+                TextField(album, { album = it }, label = { Text("Álbum") }, singleLine = true)
+                Text(
+                    "Los cambios se aplican solo dentro de MiPlayer.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                vm.saveEdit(song.id, title, artist, album)
+                onDismiss()
+            }) { Text("Guardar") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    vm.resetEdit(song.id)
+                    onDismiss()
+                }) { Text("Restablecer") }
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
+            }
+        }
+    )
+}
+
+##### app/src/main/java/com/miplayer/app/Library.kt #####
+package com.miplayer.app
+
+import android.content.Context
+import android.net.Uri
+import android.provider.MediaStore
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import org.json.JSONObject
+
+/** Consultas a MediaStore, compartidas por la app y por el servicio (Android Auto). */
+object MediaQueries {
+
+    fun minDurationMs(ctx: Context): Long =
+        ctx.getSharedPreferences("player", Context.MODE_PRIVATE).getInt("min_s", 30) * 1000L
+
+    fun includeNonMusic(ctx: Context): Boolean =
+        ctx.getSharedPreferences("player", Context.MODE_PRIVATE).getBoolean("incl_all", false)
+
+    fun audio(ctx: Context): List<Song> {
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DATE_ADDED,
+            MediaStore.Audio.Media.TRACK
+        )
+        val parts = ArrayList<String>()
+        if (!includeNonMusic(ctx)) parts += "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        parts += "${MediaStore.Audio.Media.DURATION} >= ${minDurationMs(ctx)}"
+        val out = ArrayList<Song>()
+        runCatching {
+            ctx.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                parts.joinToString(" AND "),
+                null,
+                "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val artist = c.getString(2)?.takeUnless { it == "<unknown>" } ?: "Artista desconocido"
+                    val album = c.getString(3)?.takeUnless { it == "<unknown>" } ?: "Álbum desconocido"
+                    out += Song(
+                        id = c.getLong(0),
+                        title = c.getString(1) ?: "Sin título",
+                        artist = artist,
+                        album = album,
+                        albumId = c.getLong(4),
+                        durationMs = c.getLong(5),
+                        path = c.getString(6) ?: "",
+                        dateAdded = c.getLong(7),
+                        track = c.getInt(8)
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    fun videos(ctx: Context): List<Song> {
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.TITLE,
+            MediaStore.Video.Media.DURATION,
+            MediaStore.Video.Media.DATA,
+            MediaStore.Video.Media.DATE_ADDED
+        )
+        val out = ArrayList<Song>()
+        runCatching {
+            ctx.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${MediaStore.Video.Media.DATE_ADDED} DESC"
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val path = c.getString(3) ?: ""
+                    out += Song(
+                        id = c.getLong(0) + VIDEO_BASE,
+                        title = c.getString(1) ?: "Video",
+                        artist = "",
+                        album = path.substringBeforeLast('/', "").substringAfterLast('/').ifBlank { "Videos" },
+                        albumId = 0L,
+                        durationMs = c.getLong(2),
+                        path = path,
+                        dateAdded = c.getLong(4),
+                        isVideo = true
+                    )
+                }
+            }
+        }
+        return out
+    }
+}
+
+/** Árbol de navegación para Android Auto y otros navegadores de medios. */
+object LibraryBrowser {
+
+    const val ROOT = "root"
+    const val SONGS = "songs"
+    const val ALBUMS = "albums"
+    const val ARTISTS = "artists"
+    const val FAVS = "favs"
+    const val LISTS = "lists"
+    private const val ALBUM = "album:"
+    private const val ARTIST = "artist:"
+    private const val LIST = "list:"
+
+    private fun folder(id: String, title: String, subtitle: String? = null): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(id)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setSubtitle(subtitle)
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .build()
+            )
+            .build()
+
+    fun root(): MediaItem = folder(ROOT, "MiPlayer")
+
+    private fun favoriteIds(ctx: Context): Set<Long> =
+        ctx.getSharedPreferences("player", Context.MODE_PRIVATE)
+            .getStringSet("fav", emptySet())!!.mapNotNull { it.toLongOrNull() }.toSet()
+
+    private fun playlists(ctx: Context): Map<String, List<Long>> {
+        val raw = ctx.getSharedPreferences("player", Context.MODE_PRIVATE).getString("playlists", null)
+            ?: return emptyMap()
+        return runCatching {
+            val o = JSONObject(raw)
+            val out = LinkedHashMap<String, List<Long>>()
+            o.keys().forEach { name ->
+                val a = o.getJSONArray(name)
+                out[name] = (0 until a.length()).map { a.getLong(it) }
+            }
+            out
+        }.getOrDefault(emptyMap())
+    }
+
+    fun songsFor(ctx: Context, parentId: String, all: List<Song>): List<Song>? = when {
+        parentId == SONGS -> all
+        parentId == FAVS -> {
+            val f = favoriteIds(ctx)
+            all.filter { it.id in f }
+        }
+        parentId.startsWith(ALBUM) -> {
+            val name = parentId.removePrefix(ALBUM)
+            all.filter { it.album == name }
+                .sortedWith(compareBy<Song>({ if (it.track > 0) it.track else Int.MAX_VALUE }, { it.title.lowercase() }))
+        }
+        parentId.startsWith(ARTIST) -> {
+            val name = parentId.removePrefix(ARTIST)
+            all.filter { it.artist == name }
+        }
+        parentId.startsWith(LIST) -> {
+            val byId = all.associateBy { it.id }
+            (playlists(ctx)[parentId.removePrefix(LIST)] ?: emptyList()).mapNotNull { byId[it] }
+        }
+        else -> null
+    }
+
+    fun children(ctx: Context, parentId: String): List<MediaItem>? {
+        if (parentId == ROOT) {
+            return listOf(
+                folder(SONGS, "Canciones"),
+                folder(ALBUMS, "Álbumes"),
+                folder(ARTISTS, "Artistas"),
+                folder(FAVS, "Favoritas"),
+                folder(LISTS, "Listas")
+            )
+        }
+        val all = MediaQueries.audio(ctx).sortedBy { it.title.lowercase() }
+        return when (parentId) {
+            ALBUMS -> all.groupBy { it.album }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+                .map { (name, l) -> folder(ALBUM + name, name, "${l.size} canciones") }
+            ARTISTS -> all.groupBy { it.artist }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+                .map { (name, l) -> folder(ARTIST + name, name, "${l.size} canciones") }
+            LISTS -> playlists(ctx).map { (name, ids) -> folder(LIST + name, name, "${ids.size} canciones") }
+            else -> songsFor(ctx, parentId, all)?.map { it.toMediaItem() }
+        }
+    }
+
+    /** Completa un MediaItem que solo trae el ID (lo que envía Android Auto) con su URI. */
+    fun resolve(ctx: Context, item: MediaItem, all: List<Song>): MediaItem {
+        if (item.localConfiguration != null) return item
+        val id = item.mediaId.toLongOrNull() ?: return item
+        return all.firstOrNull { it.id == id }?.toMediaItem() ?: item
+    }
+
+    fun uriOf(song: Song): Uri = song.uri
+}
+
+##### app/src/main/java/com/miplayer/app/Lyrics.kt #####
+package com.miplayer.app
+
+import android.content.Context
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+
+/** timeMs = -1 significa letra sin sincronizar. */
+data class LyricLine(val timeMs: Long, val text: String)
+
+object Lyrics {
+    private val tag = Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]""")
+
+    fun parse(raw: String): List<LyricLine> {
+        val out = ArrayList<LyricLine>()
+        for (line in raw.lines()) {
+            val matches = tag.findAll(line).toList()
+            if (matches.isEmpty()) continue
+            val text = line.substring(matches.last().range.last + 1).trim()
+            for (m in matches) {
+                val min = m.groupValues[1].toLong()
+                val sec = m.groupValues[2].toLong()
+                val frac = m.groupValues[3]
+                val ms = when (frac.length) {
+                    0 -> 0L
+                    1 -> frac.toLong() * 100
+                    2 -> frac.toLong() * 10
+                    else -> frac.take(3).toLong()
+                }
+                out += LyricLine(min * 60_000 + sec * 1_000 + ms, text)
+            }
+        }
+        return out.sortedBy { it.timeMs }
+    }
+
+    private fun storedFile(ctx: Context, song: Song) =
+        File(File(ctx.filesDir, "lyrics"), "${song.id}.lrc")
+
+    /** Busca primero la letra importada y luego un .lrc junto al archivo de audio. */
+    fun load(ctx: Context, song: Song): List<LyricLine>? {
+        var raw: String? = null
+        val stored = storedFile(ctx, song)
+        if (stored.exists()) raw = runCatching { stored.readText() }.getOrNull()
+        if (raw == null && song.path.contains('.')) {
+            val side = File(song.path.substringBeforeLast('.') + ".lrc")
+            raw = runCatching { if (side.canRead()) side.readText() else null }.getOrNull()
+        }
+        if (raw.isNullOrBlank()) return null
+        val parsed = parse(raw)
+        if (parsed.isNotEmpty()) return parsed
+        return raw.lines().filter { it.isNotBlank() }.map { LyricLine(-1L, it.trim()) }
+    }
+
+    fun save(ctx: Context, song: Song, text: String) {
+        val f = storedFile(ctx, song)
+        f.parentFile?.mkdirs()
+        f.writeText(text)
+    }
+
+    // ---------- Descarga en línea (LRCLIB, https://lrclib.net) ----------
+
+    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+
+    private fun httpGet(url: String): String? {
+        val c = URL(url).openConnection() as HttpURLConnection
+        return try {
+            c.connectTimeout = 8000
+            c.readTimeout = 8000
+            c.setRequestProperty("User-Agent", "MiPlayer/1.0 (Android)")
+            if (c.responseCode != 200) null else c.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    private fun field(o: JSONObject, k: String): String =
+        if (o.isNull(k)) "" else o.optString(k, "")
+
+    private fun pick(o: JSONObject): String? {
+        val synced = field(o, "syncedLyrics")
+        if (synced.isNotBlank()) return synced
+        val plain = field(o, "plainLyrics")
+        return plain.ifBlank { null }
+    }
+
+    /** Busca la letra por título y artista. Envía esos datos a lrclib.net. Devuelve true si la guardó. */
+    suspend fun fetchOnline(ctx: Context, song: Song): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val artist = song.artist.takeUnless { it == "Artista desconocido" } ?: ""
+            val album = song.album.takeUnless { it == "Álbum desconocido" } ?: ""
+            var text: String? = null
+
+            if (artist.isNotEmpty() && album.isNotEmpty() && song.durationMs > 0) {
+                val url = "https://lrclib.net/api/get?track_name=${enc(song.title)}" +
+                    "&artist_name=${enc(artist)}&album_name=${enc(album)}&duration=${song.durationMs / 1000}"
+                text = httpGet(url)?.let { pick(JSONObject(it)) }
+            }
+            if (text == null) {
+                val url = "https://lrclib.net/api/search?track_name=${enc(song.title)}" +
+                    (if (artist.isNotEmpty()) "&artist_name=${enc(artist)}" else "")
+                val arr = httpGet(url)?.let { JSONArray(it) }
+                if (arr != null) {
+                    var plain: String? = null
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val synced = field(o, "syncedLyrics")
+                        if (synced.isNotBlank()) {
+                            text = synced
+                            break
+                        }
+                        if (plain == null) plain = field(o, "plainLyrics").ifBlank { null }
+                    }
+                    if (text == null) text = plain
+                }
+            }
+            val t = text
+            if (t.isNullOrBlank()) false else {
+                save(ctx, song, t)
+                true
+            }
+        }.getOrDefault(false)
+    }
+
+    fun delete(ctx: Context, song: Song) {
+        runCatching { storedFile(ctx, song).delete() }
+    }
+}
+
+@Composable
+fun LyricsView(
+    lines: List<LyricLine>?,
+    posMs: Long,
+    busy: Boolean,
+    onImport: () -> Unit,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (lines == null && busy) {
+        Column(
+            modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator(Modifier.size(28.dp))
+            Text(
+                "Buscando letra en línea…",
+                Modifier.padding(top = 12.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+    if (lines == null) {
+        Column(
+            modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "No hay letra para esta canción.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "No se encontró en línea (o la descarga está desactivada en Ajustes). Puedes importar un archivo .lrc.",
+                Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(onClick = onImport) { Text("Importar .lrc") }
+        }
+        return
+    }
+
+    val synced = lines.firstOrNull()?.timeMs?.let { it >= 0 } == true
+    val idx = if (synced) lines.indexOfLast { it.timeMs <= posMs } else -1
+    val state = rememberLazyListState()
+    LaunchedEffect(idx) {
+        if (idx >= 0) state.animateScrollToItem((idx - 2).coerceAtLeast(0))
+    }
+
+    Column(modifier.fillMaxSize()) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = state) {
+            itemsIndexed(lines) { i, l ->
+                val active = i == idx
+                Text(
+                    l.text.ifBlank { "♪" },
+                    Modifier
+                        .fillMaxWidth()
+                        .then(if (synced) Modifier.clickable { onSeek(l.timeMs) } else Modifier)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    fontSize = if (active) 20.sp else 17.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    color = if (active) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            TextButton(onClick = onImport) { Text("Cambiar letra") }
+        }
+    }
+}
+
+##### app/src/main/java/com/miplayer/app/MainActivity.kt #####
+package com.miplayer.app
+
+import android.Manifest
+import android.content.ContentUris
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.audiofx.AudioEffect
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.util.LruCache
+import android.util.Size
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateListOf
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import java.text.Normalizer
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import android.app.Activity
+import java.io.File
+import androidx.media3.common.Player
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+
+class MainActivity : ComponentActivity() {
+    private val vm: PlayerViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            val ctx = LocalContext.current
+            val dark = when (vm.themeMode) {
+                1 -> false
+                2 -> true
+                else -> isSystemInDarkTheme()
+            }
+            val view = LocalView.current
+            SideEffect {
+                val window = (view.context as Activity).window
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !dark
+                controller.isAppearanceLightNavigationBars = !dark
+            }
+            MaterialTheme(colorScheme = colorSchemeFor(ctx, dark, vm.accentIndex)) {
+                App(vm)
+            }
+        }
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    /** "Abrir con MiPlayer" desde el explorador de archivos, WhatsApp, etc. */
+    private fun handleIntent(i: Intent?) {
+        if (i?.action != Intent.ACTION_VIEW) return
+        val uri = i.data ?: return
+        i.action = null // no repetir al rotar o volver a la app
+        vm.openExternal(uri)
+    }
+}
+
+// ---------- Carátulas ----------
+
+private val artCache = LruCache<String, Bitmap>(80)
+
+/** Cambia cada vez que se modifica una carátula personalizada, para recargar las imágenes. */
+var artVersion by mutableIntStateOf(0)
+
+fun refreshArt() {
+    artCache.evictAll()
+    artVersion++
+}
+
+fun loadArt(ctx: Context, song: Song, px: Int): Bitmap? {
+    val key = "${song.id}_$px"
+    artCache.get(key)?.let { return it }
+    val custom = File(File(ctx.filesDir, "art"), "${song.id}.jpg")
+    val bmp = runCatching {
+        if (custom.exists()) {
+            BitmapFactory.decodeFile(custom.absolutePath)
+        } else if (Build.VERSION.SDK_INT >= 29) {
+            ctx.contentResolver.loadThumbnail(song.uri, Size(px, px), null)
+        } else if (song.isVideo) {
+            @Suppress("DEPRECATION")
+            android.provider.MediaStore.Video.Thumbnails.getThumbnail(
+                ctx.contentResolver, song.id - VIDEO_BASE,
+                android.provider.MediaStore.Video.Thumbnails.MINI_KIND, null
+            )
+        } else {
+            val artUri = ContentUris.withAppendedId(
+                Uri.parse("content://media/external/audio/albumart"), song.albumId
+            )
+            ctx.contentResolver.openInputStream(artUri)?.use { BitmapFactory.decodeStream(it) }
+        }
+    }.getOrNull()
+    if (bmp != null) artCache.put(key, bmp)
+    return bmp
+}
+
+@Composable
+fun Art(song: Song?, modifier: Modifier = Modifier, px: Int = 256) {
+    val ctx = LocalContext.current
+    val bmp by produceState<Bitmap?>(null, song?.id, px, artVersion) {
+        value = if (song == null) null else withContext(Dispatchers.IO) { loadArt(ctx, song, px) }
+    }
+    Box(
+        modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        val b = bmp
+        if (b != null) {
+            Image(
+                bitmap = b.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Icon(
+                Icons.Rounded.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+fun fmt(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(s / 60, s % 60)
+}
+
+// ---------- App ----------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun App(vm: PlayerViewModel) {
+    val ctx = LocalContext.current
+    val audioPerm = if (Build.VERSION.SDK_INT >= 33)
+        Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    fun has(p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
+
+    val videoPerm = if (Build.VERSION.SDK_INT >= 33)
+        Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    var granted by remember { mutableStateOf(has(audioPerm)) }
+    var videoGranted by remember { mutableStateOf(has(videoPerm)) }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        granted = result[audioPerm] == true || has(audioPerm)
+        videoGranted = result[videoPerm] == true || has(videoPerm)
+        if (granted) vm.loadSongs()
+    }
+
+    LaunchedEffect(Unit) {
+        if (granted) vm.loadSongs()
+        val missing = buildList {
+            if (!granted) add(audioPerm)
+            if (!videoGranted && videoPerm != audioPerm) add(videoPerm)
+            if (Build.VERSION.SDK_INT >= 33 && !has(Manifest.permission.POST_NOTIFICATIONS)) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        if (missing.isNotEmpty()) launcher.launch(missing.toTypedArray())
+    }
+
+    val tabs = listOf("Canciones", "Álbumes", "Artistas", "Carpetas", "Favoritas", "Listas", "Videos")
+    var tab by remember { mutableIntStateOf(0) }
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var group by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
+    var openPlaylist by remember { mutableStateOf<String?>(null) }
+    var showPlayer by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showSort by remember { mutableStateOf(false) }
+    var showVideo by remember { mutableStateOf(false) }
+    var groupAlbum by remember { mutableStateOf(false) }
+
+    // Archivo abierto desde otra app
+    val opened = vm.externalOpened
+    LaunchedEffect(opened) {
+        if (opened != null) {
+            if (opened.isVideo) showVideo = true else showPlayer = true
+            vm.consumeExternal()
+        }
+    }
+
+    // Lista abierta (álbum, artista, carpeta o lista de reproducción)
+    val shownSongs: List<Song>? = openPlaylist?.let { vm.playlistSongs(it) } ?: group?.second
+    val shownTitle: String? = openPlaylist ?: group?.first
+
+    BackHandler(showVideo) { showVideo = false }
+    BackHandler(showSettings && !showVideo) { showSettings = false }
+    BackHandler(showPlayer && !showSettings && !showVideo) { showPlayer = false }
+    BackHandler(!showPlayer && !showSettings && !showVideo && shownSongs != null) {
+        group = null
+        openPlaylist = null
+        groupAlbum = false
+    }
+    BackHandler(!showPlayer && !showSettings && !showVideo && shownSongs == null && searching) {
+        searching = false
+        query = ""
+    }
+
+    val all = vm.songs
+    val albums = remember(all) {
+        all.groupBy { it.album }.toSortedMap(String.CASE_INSENSITIVE_ORDER).mapValues { (_, l) ->
+            l.sortedWith(
+                compareBy<Song>({ if (it.track > 0) it.track else Int.MAX_VALUE }, { it.title.lowercase() })
+            )
+        }
+    }
+    val artists = remember(all) { all.groupBy { it.artist }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
+    val folders = remember(all) { all.groupBy { it.folderPath }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
+    val folderLabel: (String) -> String = { it.substringAfterLast('/').ifBlank { "Raíz" } }
+
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        if (searching) {
+                            TextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                placeholder = { Text("Buscar canción, artista o álbum") },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Text(shownTitle ?: "MiPlayer", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    },
+                    navigationIcon = {
+                        if (shownSongs != null && !searching) {
+                            IconButton(onClick = {
+                                group = null
+                                openPlaylist = null
+                                groupAlbum = false
+                            }) {
+                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Atrás")
+                            }
+                        }
+                    },
+                    actions = {
+                        if (openPlaylist != null && !searching) {
+                            IconButton(onClick = {
+                                vm.deletePlaylist(openPlaylist!!)
+                                openPlaylist = null
+                            }) {
+                                Icon(Icons.Rounded.Delete, "Eliminar lista")
+                            }
+                        }
+                        if (!searching && shownSongs == null && tab == 0) {
+                            IconButton(onClick = { showSort = true }) {
+                                Icon(Icons.Rounded.Sort, "Ordenar")
+                            }
+                        }
+                        IconButton(onClick = {
+                            searching = !searching
+                            if (!searching) query = ""
+                        }) {
+                            Icon(
+                                if (searching) Icons.Rounded.Close else Icons.Rounded.Search,
+                                "Buscar"
+                            )
+                        }
+                        if (!searching) {
+                            IconButton(onClick = { showSettings = true }) {
+                                Icon(Icons.Rounded.Settings, "Ajustes")
+                            }
+                        }
+                    },
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                )
+            },
+            bottomBar = {
+                if (vm.currentSong != null) MiniPlayer(vm) { showPlayer = true }
+            }
+        ) { padding ->
+            Column(Modifier.padding(padding)) {
+                val q = query.trim()
+                if (shownSongs == null && !searching) {
+                    ScrollableTabRow(
+                        selectedTabIndex = tab,
+                        edgePadding = 8.dp,
+                        containerColor = MaterialTheme.colorScheme.background
+                    ) {
+                        tabs.forEachIndexed { i, t ->
+                            Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t) })
+                        }
+                    }
+                }
+                when {
+                    !granted -> Message("Necesito permiso para leer tu música.")
+                    q.isNotEmpty() -> {
+                        val base = shownSongs ?: all
+                        SongList(
+                            base.filter {
+                                it.title.contains(q, true) || it.artist.contains(q, true) ||
+                                    it.album.contains(q, true)
+                            }, vm, playlist = openPlaylist
+                        )
+                    }
+                    searching -> Message("Escribe para buscar.")
+                    shownSongs != null -> SongList(
+                        shownSongs, vm,
+                        empty = if (openPlaylist != null) "Lista vacía. Añade canciones con el menú ⋮." else "No hay canciones.",
+                        playlist = openPlaylist,
+                        trackNumbers = groupAlbum
+                    )
+                    else -> when (tab) {
+                        0 -> SongList(all, vm, alphabet = true)
+                        1 -> GroupList(albums) { k, l ->
+                            groupAlbum = true
+                            group = k to l
+                        }
+                        2 -> GroupList(artists) { k, l -> group = k to l }
+                        3 -> GroupList(
+                            folders,
+                            label = folderLabel,
+                            onHide = { vm.hideFolder(it) }
+                        ) { k, l -> group = folderLabel(k) to l }
+                        4 -> SongList(all.filter { it.id in vm.favorites }, vm, "Aún no tienes favoritas.")
+                        5 -> PlaylistsTab(
+                            vm,
+                            onSmart = { title, list -> group = title to list }
+                        ) { openPlaylist = it }
+                        else -> VideosTab(vm, videoGranted) { showVideo = true }
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showPlayer,
+            enter = slideInVertically { it },
+            exit = slideOutVertically { it }
+        ) {
+            NowPlaying(vm, onClose = { showPlayer = false }, onVideo = { showVideo = true })
+        }
+
+        AnimatedVisibility(
+            visible = showSettings,
+            enter = slideInVertically { it },
+            exit = slideOutVertically { it }
+        ) {
+            SettingsScreen(vm) { showSettings = false }
+        }
+
+        AnimatedVisibility(
+            visible = showVideo,
+            enter = slideInVertically { it },
+            exit = slideOutVertically { it }
+        ) {
+            VideoScreen(vm) { showVideo = false }
+        }
+
+        if (showSort) SortDialog(vm) { showSort = false }
+    }
+}
+
+@Composable
+fun Message(text: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun letterOf(text: String): Char {
+    val c = text.trim().firstOrNull() ?: return '#'
+    val base = Normalizer.normalize(c.toString(), Normalizer.Form.NFD).firstOrNull()?.uppercaseChar() ?: c
+    return if (base in 'A'..'Z') base else '#'
+}
+
+/** Barra lateral A–Z: toca o arrastra para saltar a una letra. */
+@Composable
+fun AlphaScroller(letters: List<Char>, modifier: Modifier = Modifier, onPick: (Char) -> Unit) {
+    if (letters.isEmpty()) return
+    var h by remember { mutableIntStateOf(1) }
+    var active by remember { mutableStateOf<Char?>(null) }
+    Column(
+        modifier
+            .onSizeChanged { h = it.height.coerceAtLeast(1) }
+            .pointerInput(letters) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    fun pick(y: Float) {
+                        val i = ((y / h) * letters.size).toInt().coerceIn(0, letters.size - 1)
+                        val c = letters[i]
+                        if (c != active) {
+                            active = c
+                            onPick(c)
+                        }
+                    }
+                    pick(down.position.y)
+                    do {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { it.consume() }
+                        event.changes.firstOrNull()?.let { pick(it.position.y) }
+                    } while (event.changes.any { it.pressed })
+                    active = null
+                }
+            }
+    ) {
+        letters.forEach { c ->
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    c.toString(),
+                    fontSize = 10.sp,
+                    fontWeight = if (c == active) FontWeight.Bold else FontWeight.Normal,
+                    color = if (c == active) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SongList(
+    songs: List<Song>,
+    vm: PlayerViewModel,
+    empty: String = "No hay canciones.",
+    playlist: String? = null,
+    trackNumbers: Boolean = false,
+    alphabet: Boolean = false
+) {
+    if (!vm.loaded) {
+        Message("Cargando…")
+        return
+    }
+    if (songs.isEmpty()) {
+        Message(empty)
+        return
+    }
+    val currentId = vm.current?.mediaId
+    var menuFor by remember { mutableStateOf<Song?>(null) }
+    var addFor by remember { mutableStateOf<List<Song>?>(null) }
+    var editFor by remember { mutableStateOf<Song?>(null) }
+    var selected by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val selecting = selected.isNotEmpty()
+
+    BackHandler(selecting) { selected = emptySet() }
+
+    // Índice A–Z (solo cuando se ordena por título, artista o álbum)
+    val letterKey: ((Song) -> String)? = when {
+        !alphabet -> null
+        vm.sortKey == 0 -> Song::title
+        vm.sortKey == 1 -> Song::artist
+        vm.sortKey == 2 -> Song::album
+        else -> null
+    }
+    val firstIndex = remember(songs, letterKey == null, vm.sortKey) {
+        val m = LinkedHashMap<Char, Int>()
+        if (letterKey != null) songs.forEachIndexed { i, s -> m.getOrPut(letterOf(letterKey(s))) { i } }
+        m
+    }
+    val showScroller = letterKey != null && songs.size >= 30 && !selecting
+
+    editFor?.let { s -> EditSongDialog(vm, s) { editFor = null } }
+
+    menuFor?.let { s ->
+        AlertDialog(
+            onDismissRequest = { menuFor = null },
+            title = { Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column {
+                    val options = buildList<Pair<String, () -> Unit>> {
+                        add("Reproducir a continuación" to { vm.playNext(s) })
+                        add("Añadir a la cola" to { vm.addToQueue(s) })
+                        add("Añadir a una lista" to { addFor = listOf(s) })
+                        add("Seleccionar varias" to { selected = setOf(s.id) })
+                        add("Editar información" to { editFor = s })
+                        if (playlist != null) {
+                            add("Quitar de esta lista" to { vm.removeFromPlaylist(playlist, s.id) })
+                        }
+                    }
+                    options.forEach { (label, action) ->
+                        Text(
+                            label,
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    menuFor = null
+                                    action()
+                                }
+                                .padding(vertical = 12.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { menuFor = null }) { Text("Cerrar") } }
+        )
+    }
+    addFor?.let { l ->
+        AddToPlaylistDialog(vm, l) {
+            addFor = null
+            selected = emptySet()
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        if (selecting) {
+            val chosen = songs.filter { it.id in selected }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("${chosen.size} seleccionadas", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                IconButton(onClick = { selected = emptySet() }) { Icon(Icons.Rounded.Close, "Cancelar selección") }
+            }
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Chip("Todo", false) { selected = songs.map { it.id }.toSet() }
+                Chip("Siguiente", false) {
+                    vm.playNextAll(chosen)
+                    selected = emptySet()
+                }
+                Chip("A la cola", false) {
+                    vm.addAllToQueue(chosen)
+                    selected = emptySet()
+                }
+                Chip("A una lista", false) { addFor = chosen }
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                itemsIndexed(songs, key = { _, s -> s.id }) { i, s ->
+                    val isSel = s.id in selected
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else Color.Transparent
+                            )
+                            .combinedClickable(
+                                onClick = {
+                                    if (selecting) {
+                                        selected = if (isSel) selected - s.id else selected + s.id
+                                    } else vm.play(songs, i)
+                                },
+                                onLongClick = { selected = if (isSel) selected - s.id else selected + s.id }
+                            )
+                            .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = if (showScroller) 20.dp else 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (trackNumbers) {
+                            Text(
+                                if (s.track > 0) (s.track % 1000).toString() else "–",
+                                Modifier.size(width = 32.dp, height = 24.dp),
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Art(s, Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))
+                        }
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                            Text(
+                                s.title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = if (s.id.toString() == currentId)
+                                    MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "${s.artist} · ${s.album}",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            fmt(s.durationMs),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        IconButton(onClick = { menuFor = s }) {
+                            Icon(
+                                Icons.Rounded.MoreVert, "Más opciones",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            if (showScroller) {
+                AlphaScroller(
+                    firstIndex.keys.toList(),
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(0.85f)
+                        .width(22.dp)
+                ) { c ->
+                    val idx = firstIndex[c] ?: return@AlphaScroller
+                    scope.launch { listState.scrollToItem(idx) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddToPlaylistDialog(vm: PlayerViewModel, songs: List<Song>, onDismiss: () -> Unit) {
+    var newName by remember { mutableStateOf("") }
+    val ids = songs.map { it.id }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (songs.size == 1) "Añadir a una lista" else "Añadir ${songs.size} canciones a una lista") },
+        text = {
+            Column {
+                vm.playlists.keys.forEach { name ->
+                    Text(
+                        name,
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                vm.addAllToPlaylist(name, ids)
+                                onDismiss()
+                            }
+                            .padding(vertical = 12.dp)
+                    )
+                }
+                TextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    placeholder = { Text("Nueva lista") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val n = newName.trim()
+                    if (n.isNotEmpty()) {
+                        vm.createPlaylist(n)
+                        vm.addAllToPlaylist(n, ids)
+                    }
+                    onDismiss()
+                },
+                enabled = newName.isNotBlank()
+            ) { Text("Crear y añadir") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+fun PlaylistsTab(
+    vm: PlayerViewModel,
+    onSmart: (String, List<Song>) -> Unit,
+    onOpen: (String) -> Unit
+) {
+    var creating by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+
+    if (creating) {
+        AlertDialog(
+            onDismissRequest = { creating = false },
+            title = { Text("Nueva lista") },
+            text = {
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = { Text("Nombre") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.createPlaylist(name)
+                        name = ""
+                        creating = false
+                    },
+                    enabled = name.isNotBlank()
+                ) { Text("Crear") }
+            },
+            dismissButton = { TextButton(onClick = { creating = false }) { Text("Cancelar") } }
+        )
+    }
+
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onSmart("Añadidas recientemente", vm.recentSongs) }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.History, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Añadidas recientemente", Modifier.padding(start = 16.dp))
+            }
+        }
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onSmart("Más escuchadas", vm.mostPlayed) }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.TrendingUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Más escuchadas", Modifier.padding(start = 16.dp))
+            }
+        }
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { creating = true }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    "Nueva lista",
+                    Modifier.padding(start = 16.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        itemsIndexed(vm.playlists.keys.toList(), key = { _, n -> n }) { _, n ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(n) }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Art(
+                    vm.playlistSongs(n).firstOrNull(),
+                    Modifier.size(56.dp).clip(RoundedCornerShape(10.dp))
+                )
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(n, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "${vm.playlists[n]?.size ?: 0} canciones",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GroupList(
+    groups: Map<String, List<Song>>,
+    label: (String) -> String = { it },
+    onHide: ((String) -> Unit)? = null,
+    onOpen: (String, List<Song>) -> Unit
+) {
+    if (groups.isEmpty()) {
+        Message("No hay elementos.")
+        return
+    }
+    val entries = remember(groups) { groups.entries.toList() }
+    LazyColumn(Modifier.fillMaxSize()) {
+        itemsIndexed(entries, key = { _, e -> e.key }) { _, e ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(e.key, e.value) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Art(e.value.firstOrNull(), Modifier.size(56.dp).clip(RoundedCornerShape(10.dp)))
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(label(e.key), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "${e.value.size} canciones",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (onHide != null) {
+                    IconButton(onClick = { onHide(e.key) }) {
+                        Icon(
+                            Icons.Rounded.VisibilityOff, "Ocultar carpeta",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------- Mini reproductor ----------
+
+@Composable
+fun MiniPlayer(vm: PlayerViewModel, onOpen: () -> Unit) {
+    val song = vm.currentSong ?: return
+    var pos by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            pos = vm.position()
+            delay(500)
+        }
+    }
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+        Column(Modifier.navigationBarsPadding().clickable(onClick = onOpen)) {
+            LinearProgressIndicator(
+                progress = { if (vm.duration > 0) (pos.toFloat() / vm.duration).coerceIn(0f, 1f) else 0f },
+                modifier = Modifier.fillMaxWidth().height(2.dp)
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Art(song, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                    Text(
+                        song.artist,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = { vm.togglePlay() }) {
+                    Icon(if (vm.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Reproducir/Pausar")
+                }
+                IconButton(onClick = { vm.next() }) {
+                    Icon(Icons.Rounded.SkipNext, "Siguiente")
+                }
+            }
+        }
+    }
+}
+
+##### app/src/main/java/com/miplayer/app/NowPlaying.kt #####
+package com.miplayer.app
+
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Notes
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.media3.common.Player
+import androidx.palette.graphics.Palette
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+
+@Composable
+fun NowPlaying(vm: PlayerViewModel, onClose: () -> Unit, onVideo: () -> Unit) {
+    val ctx = LocalContext.current
+    val song = vm.currentSong
+    val scheme = MaterialTheme.colorScheme
+    var pos by remember { mutableLongStateOf(0L) }
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    var showSleep by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
+    var showEq by remember { mutableStateOf(false) }
+    var showSpeed by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    var lyricsVersion by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            pos = vm.position()
+            delay(300)
+        }
+    }
+
+    // Color dominante de la carátula para el fondo
+    val tint by produceState<Color?>(null, song?.id, artVersion) {
+        value = if (song == null) null else withContext(Dispatchers.IO) {
+            runCatching {
+                val raw: Bitmap? = loadArt(ctx, song, 160)
+                // Palette no puede leer bitmaps de hardware
+                val bmp = raw?.let {
+                    if (it.config == Bitmap.Config.HARDWARE) it.copy(Bitmap.Config.ARGB_8888, false) else it
+                }
+                bmp?.let {
+                    val p = Palette.from(it).generate()
+                    val rgb = p.getDarkMutedColor(p.getDominantColor(0))
+                    if (rgb == 0) null else Color(rgb)
+                }
+            }.getOrNull()
+        }
+    }
+
+    var lyricsReady by remember(song?.id, lyricsVersion) { mutableStateOf(false) }
+    var fetching by remember(song?.id) { mutableStateOf(false) }
+    var fetchFailed by remember(song?.id) { mutableStateOf(false) }
+    val lyrics by produceState<List<LyricLine>?>(null, song?.id, lyricsVersion) {
+        value = null
+        value = if (song == null) null else withContext(Dispatchers.IO) { Lyrics.load(ctx, song) }
+        lyricsReady = true
+    }
+    // Descarga automática (LRCLIB) la primera vez que se abre la letra de una canción sin letra
+    LaunchedEffect(song?.id, showLyrics, lyricsReady, vm.autoLyrics) {
+        if (song != null && !song.isVideo && showLyrics && lyricsReady && lyrics == null &&
+            vm.autoLyrics && !fetchFailed
+        ) {
+            fetching = true
+            val ok = Lyrics.fetchOnline(ctx, song)
+            fetching = false
+            if (ok) lyricsVersion++ else fetchFailed = true
+        }
+    }
+    val lyricsPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && song != null) {
+            val text = runCatching {
+                ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            }.getOrNull()
+            if (!text.isNullOrBlank()) {
+                Lyrics.save(ctx, song, text)
+                lyricsVersion++
+            }
+        }
+    }
+
+    val bg = tint?.let {
+        Brush.verticalGradient(listOf(it.copy(alpha = 0.55f), scheme.background, scheme.background))
+    } ?: Brush.verticalGradient(listOf(scheme.background, scheme.background))
+
+    Surface(Modifier.fillMaxSize(), color = scheme.background) {
+        Box(Modifier.fillMaxSize().background(bg)) {
+            Column(
+                Modifier
+                    .systemBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) { Icon(Icons.Rounded.KeyboardArrowDown, "Cerrar") }
+                    Text("Reproduciendo", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                    if (song?.isVideo == true) {
+                        IconButton(onClick = onVideo) { Icon(Icons.Rounded.Videocam, "Ver video") }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(24.dp))
+                ) {
+                    if (showLyrics) {
+                        LyricsView(
+                            lines = lyrics,
+                            posMs = pos,
+                            busy = fetching || !lyricsReady,
+                            onImport = { lyricsPicker.launch(arrayOf("*/*")) },
+                            onSeek = { vm.seekTo(it) },
+                            modifier = Modifier.background(scheme.surface.copy(alpha = 0.6f))
+                        )
+                    } else {
+                        Art(song, Modifier.fillMaxSize(), px = 800)
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            song?.title ?: "",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            song?.artist ?: "",
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (song != null) {
+                        val fav = song.id in vm.favorites
+                        IconButton(onClick = { vm.toggleFavorite(song.id) }) {
+                            Icon(
+                                if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                "Favorita",
+                                tint = if (fav) scheme.primary else scheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                val dur = vm.duration.coerceAtLeast(1L).toFloat()
+                Slider(
+                    value = (dragging ?: pos.toFloat()).coerceIn(0f, dur),
+                    onValueChange = { dragging = it },
+                    onValueChangeFinished = {
+                        dragging?.let { vm.seekTo(it.toLong()) }
+                        dragging = null
+                    },
+                    valueRange = 0f..dur
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(fmt((dragging ?: pos.toFloat()).toLong()), fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                    Text(fmt(vm.duration), fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { vm.toggleShuffle() }) {
+                        Icon(
+                            Icons.Rounded.Shuffle, "Aleatorio",
+                            tint = if (vm.shuffle) scheme.primary else scheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { vm.previous() }, modifier = Modifier.size(56.dp)) {
+                        Icon(Icons.Rounded.SkipPrevious, "Anterior", Modifier.size(36.dp))
+                    }
+                    FilledIconButton(onClick = { vm.togglePlay() }, modifier = Modifier.size(72.dp)) {
+                        Icon(
+                            if (vm.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            "Reproducir/Pausar",
+                            Modifier.size(40.dp)
+                        )
+                    }
+                    IconButton(onClick = { vm.next() }, modifier = Modifier.size(56.dp)) {
+                        Icon(Icons.Rounded.SkipNext, "Siguiente", Modifier.size(36.dp))
+                    }
+                    IconButton(onClick = { vm.cycleRepeat() }) {
+                        Icon(
+                            if (vm.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne
+                            else Icons.Rounded.Repeat,
+                            "Repetir",
+                            tint = if (vm.repeatMode != Player.REPEAT_MODE_OFF) scheme.primary
+                            else scheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { showLyrics = !showLyrics }) {
+                        Icon(
+                            Icons.Rounded.Notes, "Letra",
+                            tint = if (showLyrics) scheme.primary else scheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { showSpeed = true }) {
+                        Icon(
+                            Icons.Rounded.Speed, "Velocidad",
+                            tint = if (vm.speed != 1f) scheme.primary else scheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { showEq = true }) {
+                        Icon(Icons.Rounded.Tune, "Ecualizador", tint = scheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { showSleep = true }) {
+                        Icon(
+                            Icons.Rounded.Bedtime, "Temporizador",
+                            tint = if (vm.sleepEndsAt > 0 || vm.sleepAtEnd) scheme.primary else scheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { showQueue = true }) {
+                        Icon(Icons.Rounded.QueueMusic, "Cola", tint = scheme.onSurfaceVariant)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+        }
+    }
+
+    if (showQueue) QueueSheet(vm) { showQueue = false }
+    if (showEq) EqualizerSheet(vm) { showEq = false }
+    if (showSpeed) SpeedDialog(vm) { showSpeed = false }
+
+    if (showSleep) {
+        AlertDialog(
+            onDismissRequest = { showSleep = false },
+            title = { Text("Temporizador de apagado") },
+            text = {
+                Column {
+                    listOf(
+                        0 to "Desactivado", 15 to "15 minutos", 30 to "30 minutos",
+                        45 to "45 minutos", 60 to "1 hora"
+                    ).forEach { (min, label) ->
+                        Text(
+                            label,
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    vm.setSleepTimer(min)
+                                    showSleep = false
+                                }
+                                .padding(vertical = 12.dp)
+                        )
+                    }
+                    Text(
+                        if (vm.sleepAtEnd) "Al terminar la canción ✓" else "Al terminar la canción",
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                vm.setSleepAtEnd(true)
+                                showSleep = false
+                            }
+                            .padding(vertical = 12.dp),
+                        color = if (vm.sleepAtEnd) scheme.primary else scheme.onSurface
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSleep = false }) { Text("Cerrar") }
+            }
+        )
+    }
+}
+
+##### app/src/main/java/com/miplayer/app/PlaybackService.kt #####
+package com.miplayer.app
+
+import android.content.Intent
+import android.content.SharedPreferences
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.common.Timeline
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
+import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+
+class PlaybackService : MediaLibraryService() {
+
+    private var session: MediaLibrarySession? = null
+    private var exo: ExoPlayer? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private lateinit var appPrefs: SharedPreferences
+    private lateinit var statePrefs: SharedPreferences
+    private lateinit var effects: AudioEffects
+    private var fadeMs = 0L
+    private var xfadeMs = 0L
+    private var pauseEnd = false
+    private var ticks = 0
+
+    // Crossfade real (experimental): un segundo reproductor termina la canción anterior
+    private var tail: ExoPlayer? = null
+    private var tailT0 = 0L
+    private var tailMs = 0L
+
+    private val ticker = object : Runnable {
+        override fun run() {
+            
