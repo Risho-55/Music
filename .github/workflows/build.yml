@@ -1,212 +1,223 @@
-MiPlayer v4 - proyecto completo (un solo archivo)
-============================================================
-Cada archivo empieza con una linea '##### RUTA #####'.
-Copia cada bloque a su ruta dentro del repositorio y haz commit en main;
-GitHub Actions compila el APK (Actions > Build APK > Artifacts).
-
-Archivos incluidos:
-  - .github/workflows/build.yml
-  - .gitignore
-  - README.md
-  - app/src/main/AndroidManifest.xml
-  - app/src/main/java/com/miplayer/app/AudioEffects.kt
-  - app/src/main/java/com/miplayer/app/AudioExtractor.kt
-  - app/src/main/java/com/miplayer/app/Dialogs.kt
-  - app/src/main/java/com/miplayer/app/Library.kt
-  - app/src/main/java/com/miplayer/app/Lyrics.kt
-  - app/src/main/java/com/miplayer/app/MainActivity.kt
-  - app/src/main/java/com/miplayer/app/NowPlaying.kt
-  - app/src/main/java/com/miplayer/app/PlaybackService.kt
-  - app/src/main/java/com/miplayer/app/PlayerViewModel.kt
-  - app/src/main/java/com/miplayer/app/PlayerWidget.kt
-  - app/src/main/java/com/miplayer/app/Queue.kt
-  - app/src/main/java/com/miplayer/app/Settings.kt
-  - app/src/main/java/com/miplayer/app/Videos.kt
-  - app/src/main/res/drawable/ic_launcher_background.xml
-  - app/src/main/res/drawable/ic_launcher_foreground.xml
-  - app/src/main/res/drawable/widget_bg.xml
-  - app/src/main/res/layout/widget_player.xml
-  - app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-  - app/src/main/res/values/strings.xml
-  - app/src/main/res/values/themes.xml
-  - app/src/main/res/xml/automotive_app_desc.xml
-  - app/src/main/res/xml/widget_info.xml
-  - gradle.properties
-
-##### .github/workflows/build.yml #####
-name: Build APK
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
-
-      - name: Compilar APK debug
-        run: gradle assembleDebug --no-daemon
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: MiPlayer-debug
-          path: app/build/outputs/apk/debug/*.apk
-
-##### .gitignore #####
-.gradle/
-build/
-local.properties
-.idea/
-*.iml
-
-##### README.md #####
-# MiPlayer
-
-Reproductor de música local para Android, inspirado en Lark Player.
-
-- Kotlin + Jetpack Compose + Media3 (ExoPlayer + MediaSession)
-- Biblioteca: Canciones, Álbumes, Artistas, Carpetas, Favoritas y Listas
-- Listas propias, "Añadidas recientemente" y "Más escuchadas"
-- Cola de reproducción, "reproducir a continuación", búsqueda
-- Ordenar (título, artista, álbum, fecha, duración) y ocultar carpetas
-- Editar título, artista, álbum y carátula (solo dentro de la app)
-- Letras: archivos .lrc sincronizados y descarga automática en línea (LRCLIB, se puede desactivar)
-- Videos: pestaña Videos, reproductor de video; al cerrar la pantalla sigue sonando solo el audio
-- Convertir video a audio sin recodificar (AAC → .m4a, Opus/Vorbis → .webm) en Música/MiPlayer
-- "Abrir con MiPlayer" desde otras apps (audio y video)
-- Cola con reordenar arrastrando, selección múltiple (mantén pulsada una canción), índice A–Z
-- Álbumes ordenados por número de pista
-- Temporizador de apagado, incluido "al terminar la canción"
-- Nivelador de volumen (limitador, no es normalización real)
-- Duración mínima configurable e inclusión de tonos y notas de voz
-- Crossfade real experimental (desactivado por defecto)
-- Android Auto: expone Canciones, Álbumes, Artistas, Favoritas y Listas
-- Ecualizador propio con presets y refuerzo de graves
-- Velocidad de reproducción, temporizador de apagado
-- Fundido entre canciones (la reproducción sin pausas la da ExoPlayer)
-- Recuerda la cola, la posición, la velocidad, el aleatorio y la repetición
-- Widget de inicio y controles en la pantalla de bloqueo (notificación multimedia)
-- Temas: sistema, claro, oscuro, color de acento y Material You (Android 12+)
-- Respaldo: exportar e importar listas, favoritas y ajustes en un archivo JSON
-
-## Compilar
-
-Sube el proyecto a un repositorio de GitHub (rama `main`). El workflow
-`.github/workflows/build.yml` compila el APK; descárgalo desde
-Actions > Build APK > Artifacts.
-
-## Notas
-
-- Escribir etiquetas dentro del archivo de audio no está incluido: las ediciones se guardan solo dentro de la app.
-- Android Auto: si instalas el APK fuera de Google Play, activa el modo desarrollador de Android Auto y
-  "Orígenes desconocidos".
-- Esta versión no se ha podido compilar en el entorno donde se escribió; si el build de GitHub falla,
-  copia el error del log y se corrige.
-
-##### app/src/main/AndroidManifest.xml #####
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.MiPlayer">
-
-        <!-- Android Auto: la app expone su biblioteca de música -->
-        <meta-data
-            android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" />
-
-        <activity
-            android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
-            android:exported="true"
-            android:launchMode="singleTop">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <!-- "Abrir con MiPlayer" desde otras apps -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-                <data android:mimeType="audio/*" />
-                <data android:mimeType="video/*" />
-                <data android:mimeType="application/ogg" />
-            </intent-filter>
-        </activity>
-
-        <receiver
-            android:name=".PlayerWidget"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_info" />
-        </receiver>
-
-        <receiver
-            android:name="androidx.media3.session.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
-
-        <service
-            android:name=".PlaybackService"
-            android:exported="true"
-            android:foregroundServiceType="mediaPlayback">
-            <intent-filter>
-                <action android:name="androidx.media3.session.MediaLibraryService" />
-                <action android:name="androidx.media3.session.MediaSessionService" />
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
-        </service>
-    </application>
-</manifest>
-
-##### app/src/main/java/com/miplayer/app/AudioEffects.kt #####
 package com.miplayer.app
 
+import android.Manifest
+import android.app.Activity
+import android.app.Application
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
+import android.content.ContentUris
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
+import android.media.MediaMuxer
+import android.media.MediaScannerConnection
+import android.media.audiofx.AudioEffect
 import android.media.audiofx.BassBoost
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.provider.MediaStore
+import android.provider.OpenableColumns
+import android.util.LruCache
+import android.util.Size
+import android.view.KeyEvent
+import android.widget.RemoteViews
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Notes
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.common.Timeline
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaButtonReceiver
+import androidx.media3.session.MediaController
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
+import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import androidx.media3.session.SessionToken
+import androidx.media3.ui.PlayerView
+import androidx.palette.graphics.Palette
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import java.nio.ByteBuffer
+import java.text.Normalizer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
+// ===== AudioEffects.kt =====
 /** Ecualizador + refuerzo de graves, ligados a la sesión de audio del reproductor. */
 class AudioEffects(private val prefs: SharedPreferences) {
 
@@ -361,23 +372,7 @@ class AudioEffects(private val prefs: SharedPreferences) {
     }
 }
 
-##### app/src/main/java/com/miplayer/app/AudioExtractor.kt #####
-package com.miplayer.app
-
-import android.content.ContentValues
-import android.content.Context
-import android.media.MediaCodec
-import android.media.MediaExtractor
-import android.media.MediaFormat
-import android.media.MediaMuxer
-import android.media.MediaScannerConnection
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import java.io.File
-import java.nio.ByteBuffer
-
+// ===== AudioExtractor.kt =====
 /**
  * Extrae la pista de audio de un video SIN recodificar (sin pérdida de calidad).
  * Soporta audio AAC (se guarda como .m4a) y Opus/Vorbis (se guardan como .webm).
@@ -492,34 +487,7 @@ object AudioExtractor {
     }
 }
 
-##### app/src/main/java/com/miplayer/app/Dialogs.kt #####
-package com.miplayer.app
-
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
-
+// ===== Dialogs.kt =====
 val SortOptions = listOf("Título", "Artista", "Álbum", "Fecha añadida", "Duración")
 
 @Composable
@@ -631,16 +599,7 @@ fun EditSongDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit) {
     )
 }
 
-##### app/src/main/java/com/miplayer/app/Library.kt #####
-package com.miplayer.app
-
-import android.content.Context
-import android.net.Uri
-import android.provider.MediaStore
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import org.json.JSONObject
-
+// ===== Library.kt =====
 /** Consultas a MediaStore, compartidas por la app y por el servicio (Android Auto). */
 object MediaQueries {
 
@@ -831,42 +790,7 @@ object LibraryBrowser {
     fun uriOf(song: Song): Uri = song.uri
 }
 
-##### app/src/main/java/com/miplayer/app/Lyrics.kt #####
-package com.miplayer.app
-
-import android.content.Context
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.foundation.layout.size
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-
+// ===== Lyrics.kt =====
 /** timeMs = -1 significa letra sin sincronizar. */
 data class LyricLine(val timeMs: Long, val text: String)
 
@@ -1065,145 +989,7 @@ fun LyricsView(
     }
 }
 
-##### app/src/main/java/com/miplayer/app/MainActivity.kt #####
-package com.miplayer.app
-
-import android.Manifest
-import android.content.ContentUris
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.media.audiofx.AudioEffect
-import android.net.Uri
-import android.os.Build
-import android.os.Bundle
-import android.util.LruCache
-import android.util.Size
-import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.mutableStateListOf
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Add
-import java.text.Normalizer
-import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Sort
-import androidx.compose.material.icons.rounded.TrendingUp
-import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Equalizer
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.platform.LocalView
-import android.app.Activity
-import java.io.File
-import androidx.media3.common.Player
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-
+// ===== MainActivity.kt =====
 class MainActivity : ComponentActivity() {
     private val vm: PlayerViewModel by viewModels()
 
@@ -2040,80 +1826,7 @@ fun MiniPlayer(vm: PlayerViewModel, onOpen: () -> Unit) {
     }
 }
 
-##### app/src/main/java/com/miplayer/app/NowPlaying.kt #####
-package com.miplayer.app
-
-import android.graphics.Bitmap
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Notes
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.Videocam
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.media3.common.Player
-import androidx.palette.graphics.Palette
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-
+// ===== NowPlaying.kt =====
 @Composable
 fun NowPlaying(vm: PlayerViewModel, onClose: () -> Unit, onVideo: () -> Unit) {
     val ctx = LocalContext.current
@@ -2388,33 +2101,7 @@ fun NowPlaying(vm: PlayerViewModel, onClose: () -> Unit, onVideo: () -> Unit) {
     }
 }
 
-##### app/src/main/java/com/miplayer/app/PlaybackService.kt #####
-package com.miplayer.app
-
-import android.content.Intent
-import android.content.SharedPreferences
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackParameters
-import androidx.media3.common.Player
-import androidx.media3.common.Timeline
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.LibraryResult
-import androidx.media3.session.MediaLibraryService
-import androidx.media3.session.MediaLibraryService.LibraryParams
-import androidx.media3.session.MediaLibraryService.MediaLibrarySession
-import androidx.media3.session.MediaSession
-import androidx.media3.session.SessionCommand
-import androidx.media3.session.SessionResult
-import com.google.common.collect.ImmutableList
-import com.google.common.util.concurrent.Futures
-import com.google.common.util.concurrent.ListenableFuture
-
+// ===== PlaybackService.kt =====
 class PlaybackService : MediaLibraryService() {
 
     private var session: MediaLibrarySession? = null
@@ -2435,4 +2122,317 @@ class PlaybackService : MediaLibraryService() {
 
     private val ticker = object : Runnable {
         override fun run() {
-            
+            val p = exo ?: return
+            if (tail != null) driveTail(p) else {
+                checkCrossfade(p)
+                applyFade(p)
+            }
+            ticks++
+            if (ticks % 50 == 0) savePosition(p)
+            handler.postDelayed(this, 100)
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        appPrefs = getSharedPreferences("player", MODE_PRIVATE)
+        statePrefs = getSharedPreferences("player_state", MODE_PRIVATE)
+        fadeMs = appPrefs.getInt("fade_s", 0) * 1000L
+        xfadeMs = appPrefs.getInt("xfade_s", 0) * 1000L
+
+        val player = ExoPlayer.Builder(this)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                true
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build()
+        exo = player
+
+        effects = AudioEffects(statePrefs)
+        effects.attach(player.audioSessionId)
+
+        // Recordar velocidad, aleatorio y repetición entre sesiones
+        player.setPlaybackSpeed(statePrefs.getFloat("speed", 1f))
+        player.shuffleModeEnabled = statePrefs.getBoolean("shuffle", false)
+        player.repeatMode = statePrefs.getInt("repeat", Player.REPEAT_MODE_OFF)
+
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+                statePrefs.edit().putFloat("speed", playbackParameters.speed).apply()
+                tail?.setPlaybackSpeed(playbackParameters.speed)
+            }
+
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                statePrefs.edit().putBoolean("shuffle", shuffleModeEnabled).apply()
+            }
+
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                statePrefs.edit().putInt("repeat", repeatMode).apply()
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                handler.removeCallbacks(ticker)
+                if (isPlaying) {
+                    handler.post(ticker)
+                } else {
+                    savePosition(player)
+                }
+                updateWidget(player)
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady) releaseTail(player)
+                // "Al terminar la canción": ya pausó, se apaga el modo
+                if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                    pauseEnd = false
+                    player.pauseAtEndOfMediaItems = false
+                }
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                savePosition(player)
+                updateWidget(player)
+            }
+
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                saveQueue(player)
+            }
+
+            override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+                updateWidget(player)
+            }
+
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                effects.attach(audioSessionId)
+            }
+        })
+
+        session = MediaLibrarySession.Builder(this, player, LibraryCallback()).build()
+    }
+
+    // ---------- Sesión / Android Auto ----------
+
+    private inner class LibraryCallback : MediaLibrarySession.Callback {
+
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            val builder = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+            COMMANDS.forEach { builder.add(SessionCommand(it, Bundle.EMPTY)) }
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(builder.build())
+                .build()
+        }
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<MediaItem>> =
+            Futures.immediateFuture(LibraryResult.ofItem(LibraryBrowser.root(), params))
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val id = mediaId.toLongOrNull()
+            val item = if (id == null) null
+            else MediaQueries.audio(this@PlaybackService).firstOrNull { it.id == id }?.toMediaItem()
+            return Futures.immediateFuture(
+                if (item != null) LibraryResult.ofItem(item, null)
+                else LibraryResult.ofError<MediaItem>(LibraryResult.RESULT_ERROR_BAD_VALUE)
+            )
+        }
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            val list = LibraryBrowser.children(this@PlaybackService, parentId)
+                ?: return Futures.immediateFuture(
+                    LibraryResult.ofError<ImmutableList<MediaItem>>(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                )
+            val from = (page * pageSize).coerceAtMost(list.size)
+            val to = (from + pageSize).coerceAtMost(list.size)
+            return Futures.immediateFuture(
+                LibraryResult.ofItemList(ImmutableList.copyOf(list.subList(from, to)), params)
+            )
+        }
+
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>
+        ): ListenableFuture<MutableList<MediaItem>> {
+            val needs = mediaItems.any { it.localConfiguration == null }
+            if (!needs) return Futures.immediateFuture(mediaItems)
+            val all = MediaQueries.audio(this@PlaybackService)
+            val resolved = mediaItems.map { LibraryBrowser.resolve(this@PlaybackService, it, all) }
+            return Futures.immediateFuture(resolved.toMutableList())
+        }
+
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val all = MediaQueries.audio(this@PlaybackService)
+            val external = controller.packageName != packageName
+            // Desde el coche se elige una sola canción: se arma la cola con toda la biblioteca
+            if (external && mediaItems.size == 1 && mediaItems[0].localConfiguration == null) {
+                val sorted = all.sortedBy { it.title.lowercase() }
+                val idx = sorted.indexOfFirst { it.id.toString() == mediaItems[0].mediaId }
+                if (idx >= 0) {
+                    return Futures.immediateFuture(
+                        MediaSession.MediaItemsWithStartPosition(
+                            sorted.map { it.toMediaItem() }, idx, startPositionMs
+                        )
+                    )
+                }
+            }
+            val resolved = mediaItems.map { LibraryBrowser.resolve(this@PlaybackService, it, all) }
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(resolved, startIndex, startPositionMs)
+            )
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle
+        ): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                CMD_EQ_GET -> return Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_SUCCESS, effects.info())
+                )
+                CMD_EQ_BAND -> effects.setBand(args.getInt("band"), args.getInt("level"))
+                CMD_EQ_ENABLE -> effects.setEnabled(args.getBoolean("on"))
+                CMD_EQ_BASS -> effects.setBass(args.getInt("strength"))
+                CMD_EQ_PRESET -> effects.preset(args.getString("name") ?: "Normal")
+                CMD_FADE -> {
+                    fadeMs = args.getInt("s") * 1000L
+                    if (fadeMs == 0L) session.player.volume = 1f
+                }
+                CMD_XFADE -> {
+                    xfadeMs = args.getInt("s") * 1000L
+                    if (xfadeMs == 0L) exo?.let { releaseTail(it) }
+                }
+                CMD_LEVELER -> effects.setLeveler(args.getBoolean("on"))
+                CMD_PAUSE_END -> {
+                    pauseEnd = args.getBoolean("on")
+                    exo?.pauseAtEndOfMediaItems = pauseEnd
+                }
+                else -> return Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED)
+                )
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
+    }
+
+    // ---------- Fundido de salida / entrada ----------
+
+    private fun applyFade(p: Player) {
+        if (fadeMs <= 0L) {
+            if (p.volume != 1f) p.volume = 1f
+            return
+        }
+        val dur = p.duration
+        if (dur == C.TIME_UNSET || dur <= 0L) return
+        val pos = p.currentPosition
+        val fadeIn = (pos.toFloat() / fadeMs).coerceIn(0f, 1f)
+        val fadeOut = ((dur - pos).toFloat() / fadeMs).coerceIn(0f, 1f)
+        p.volume = minOf(fadeIn, fadeOut)
+    }
+
+    // ---------- Crossfade real (experimental) ----------
+
+    /** Cuando faltan N segundos, pasa a la siguiente y deja que un segundo reproductor termine la actual. */
+    private fun checkCrossfade(p: ExoPlayer) {
+        if (xfadeMs <= 0L || pauseEnd || !p.isPlaying) return
+        if (p.repeatMode == Player.REPEAT_MODE_ONE || !p.hasNextMediaItem()) return
+        val dur = p.duration
+        if (dur == C.TIME_UNSET || dur < 8_000L) return
+        val item = p.currentMediaItem ?: return
+        val win = minOf(xfadeMs, dur / 2)
+        val pos = p.currentPosition
+        if (pos > win && dur - pos <= win) {
+            startTail(p, item, pos, win)
+            p.seekToNextMediaItem()
+        }
+    }
+
+    private fun startTail(main: ExoPlayer, item: MediaItem, pos: Long, win: Long) {
+        releaseTail(main)
+        try {
+            val t = ExoPlayer.Builder(this).build()
+            t.setMediaItem(item, pos)
+            t.setPlaybackSpeed(main.playbackParameters.speed)
+            t.volume = 1f
+            t.prepare()
+            t.play()
+            tail = t
+            tailT0 = SystemClock.elapsedRealtime()
+            tailMs = win
+            main.volume = 0f
+        } catch (e: Exception) {
+            tail = null
+            main.volume = 1f
+        }
+    }
+
+    private fun driveTail(main: ExoPlayer) {
+        val t = tail ?: return
+        val frac = ((SystemClock.elapsedRealtime() - tailT0).toFloat() / tailMs).coerceIn(0f, 1f)
+        t.volume = 1f - frac
+        main.volume = frac
+        if (frac >= 1f || t.playbackState == Player.STATE_ENDED) releaseTail(main)
+    }
+
+    private fun releaseTail(main: Player) {
+        tail?.let { runCatching { it.release() } }
+        tail = null
+        main.volume = 1f
+    }
+
+    // ---------- Recordar cola y posición ----------
+
+    private fun saveQueue(p: Player) {
+        val ids = (0 until p.mediaItemCount).joinToString(",") { p.getMediaItemAt(it).mediaId }
+        statePrefs.edit().putString("queue", ids).apply()
+        savePosition(p)
+    }
+
+    private fun savePosition(p: Player) {
+        if (p.mediaItemCount == 0) return
+        statePrefs.edit()
+            .putLong("curId", p.currentMediaItem?.mediaId?.toLongOrNull() ?: -1L)
+            .putLong("pos", p.currentPosition)
+            .apply()
+    }
+
+    private fun updateWidget(p: Player) {
+        val md = p.mediaMetadata
+        getSharedPreferences("widget", MODE_PRIVATE).edit()
+            .putString("title", md.title?.toString() ?: "")
+            .putString("artist", md.artist?.toString() ?: "")
+            .putBoolean("playing", p.isPlaying)
+            .apply()
+        PlayerWidget.refresh(this)
+    }
+
+    override fun onGetSession(cont
